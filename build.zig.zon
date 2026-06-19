@@ -1,0 +1,20 @@
+.{
+    .name = .tetris,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.16.0",
+
+    .fingerprint = 0xbeb86dd47701af3a,
+
+    .dependencies = .{
+        .raylib = .{
+            .url = "https://github.com/raysan5/raylib/archive/refs/tags/6.0.zip",
+            .hash = "raylib-6.0.0-whq8uCSwLgWWeF3ec3dbG6Rr36SLFL-s2WJ1Q_2E22Bb",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
