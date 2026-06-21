@@ -2,142 +2,101 @@ const std = @import("std");
 const raylib = @import("raylib");
 
 const Vector2 = raylib.Vector2;
+const Color = raylib.Color;
 
-const CELL_SIZE = 40;
-const PLAYFIELD_DIMS = Vector2{ .x = 10, .y = 16 };
-const PLAYFIELD_SIZE = Vector2{
-    .x = PLAYFIELD_DIMS.x * CELL_SIZE,
-    .y = PLAYFIELD_DIMS.y * CELL_SIZE,
-};
+const CELL_SIZE: usize = 40;
+
+const BUFFER_HEIGHT: usize = 20;
+const PLAYFIELD_DIM = Vector2{ .x = 10, .y = 20 };
+const GRID_DIM = Vector2{ .x = PLAYFIELD_DIM.x, .y = BUFFER_HEIGHT + PLAYFIELD_DIM.y };
+const GRID_SIZE = Vector2{ .x = GRID_DIM.x * CELL_SIZE, .y = GRID_DIM.y * CELL_SIZE };
 
 const WINDOW_SIZE = Vector2{
-    .x = PLAYFIELD_SIZE.x + 200,
-    .y = PLAYFIELD_SIZE.y,
+    .x = CELL_SIZE * PLAYFIELD_DIM.x + 100,
+    .y = CELL_SIZE * PLAYFIELD_DIM.y,
+};
+const VIEWPORT_SIZE = Vector2{
+    .x = CELL_SIZE * PLAYFIELD_DIM.x,
+    .y = CELL_SIZE * (PLAYFIELD_DIM.y + BUFFER_HEIGHT),
 };
 
-const Point = struct {
-    row: u8,
-    col: u8,
-};
-
-const Cell = struct {
-    active: bool,
-    position: Vector2,
-
-    pub fn init() Cell {
-        return Cell{
-            .active = false,
-            .position = Vector2{ .x = 0, .y = 0 },
-        };
-    }
-};
+// #1a1b26
+const BACKGROUND_COLOR = raylib.RAYWHITE;
 
 pub fn main(_: std.process.Init) !void {
     raylib.SetTargetFPS(60);
 
-    var grid: [PLAYFIELD_DIMS.y][PLAYFIELD_DIMS.x]Cell = undefined;
-    for (0..grid.len) |row| {
-        for (0..grid[row].len) |col| {
-            grid[row][col].position = Vector2{
-                .x = @as(f32, @floatFromInt(col)) * CELL_SIZE,
-                .y = @as(f32, @floatFromInt(row)) * CELL_SIZE,
-            };
-        }
-    }
-
     raylib.InitWindow(WINDOW_SIZE.x, WINDOW_SIZE.y, "Tetris");
     defer raylib.CloseWindow();
 
-    var straight_pos = Point{ .row = 0, .col = 4 };
-    for (0..4) |i| {
-        grid[straight_pos.row][straight_pos.col + i].active = true;
-    }
+    var camera = raylib.Camera2D{
+        .target = Vector2{ .x = WINDOW_SIZE.x / 2.0, .y = CELL_SIZE * (PLAYFIELD_DIM.y / 2.0 + BUFFER_HEIGHT) },
+        .offset = Vector2{ .x = WINDOW_SIZE.x / 2.0, .y = WINDOW_SIZE.y / 2.0 },
+        .rotation = 0.0,
+        .zoom = 1.0,
+    };
 
-    const tick_interval: f32 = 1.0;
-    const epsilon = std.math.floatEps(f32);
-    var tick_timer: f32 = tick_interval;
+    const grid: [GRID_DIM.y][GRID_DIM.x]bool = .{.{false} ** GRID_DIM.x} ** GRID_DIM.y;
 
     while (!raylib.WindowShouldClose()) {
-        const fps_text = raylib.TextFormat("%d FPS", raylib.GetFPS());
-        const fps_font_size = 20;
-        const fps_width = raylib.MeasureText(fps_text, fps_font_size);
+        if (raylib.IsKeyDown(raylib.KEY_UP)) {
+            camera.target.y -= 4.0;
+        }
 
-        const delta_time = raylib.GetFrameTime();
-
-        tick_timer -= delta_time;
-        if (tick_timer <= epsilon) {
-            for (0..4) |i| {
-                grid[straight_pos.row][straight_pos.col + i].active = false;
-                grid[straight_pos.row + 1][straight_pos.col + i].active = true;
-            }
-            straight_pos.row += 1;
-
-            tick_timer = tick_interval;
+        if (raylib.IsKeyDown(raylib.KEY_DOWN)) {
+            camera.target.y += 4.0;
         }
 
         {
             raylib.BeginDrawing();
             defer raylib.EndDrawing();
 
-            raylib.ClearBackground(raylib.RAYWHITE);
-            raylib.DrawText(
-                fps_text,
-                @as(c_int, @intFromFloat(WINDOW_SIZE.x)) - fps_width - 10,
-                10,
-                fps_font_size,
-                raylib.GREEN,
-            );
+            // BACKGROUND_COLOR.ClearBackground();
+            raylib.ClearBackground(BACKGROUND_COLOR);
 
-            // Playfield
-            for (1..PLAYFIELD_DIMS.y) |row| {
-                const y = @as(f32, @floatFromInt(row)) * CELL_SIZE;
+            {
+                raylib.BeginMode2D(camera);
+                defer raylib.EndMode2D();
 
-                raylib.DrawLineDashed(
-                    Vector2{ .x = 0, .y = y },
-                    Vector2{ .x = PLAYFIELD_SIZE.x, .y = y },
-                    1,
-                    1,
-                    raylib.LIGHTGRAY,
-                );
-            }
-
-            for (1..PLAYFIELD_DIMS.x + 1) |col| {
-                const x = @as(f32, @floatFromInt(col)) * CELL_SIZE;
-
-                raylib.DrawLineDashed(
-                    Vector2{ .x = x, .y = 0 },
-                    Vector2{ .x = x, .y = PLAYFIELD_SIZE.y },
-                    1,
-                    1,
-                    raylib.LIGHTGRAY,
-                );
-            }
-
-            // Cells
-            var i: u32 = 0;
-            for (0..grid.len) |row| {
-                for (0..grid[row].len) |col| {
-                    const text = raylib.TextFormat("%d", i);
-                    const cell = &grid[row][col];
-
-                    raylib.DrawText(
-                        text,
-                        @as(c_int, @intFromFloat(cell.position.x)) + 15,
-                        @as(c_int, @intFromFloat(cell.position.y)) + 15,
-                        5,
+                for (0..grid.len + 1) |row| {
+                    const y: f32 = @floatFromInt(row * CELL_SIZE);
+                    raylib.DrawLineDashed(
+                        Vector2{ .x = 0, .y = y },
+                        Vector2{ .x = GRID_SIZE.x, .y = y },
+                        2,
+                        2,
                         raylib.LIGHTGRAY,
                     );
+                }
 
-                    if (cell.active) {
-                        raylib.DrawRectangleRec(raylib.Rectangle{
-                            .x = cell.position.x,
-                            .y = cell.position.y,
-                            .width = CELL_SIZE,
-                            .height = CELL_SIZE,
-                        }, raylib.RED);
+                for (0..grid[0].len + 1) |col| {
+                    const x: f32 = @floatFromInt(col * CELL_SIZE);
+                    raylib.DrawLineDashed(
+                        Vector2{ .x = x, .y = 0 },
+                        Vector2{ .x = x, .y = GRID_SIZE.y },
+                        2,
+                        2,
+                        raylib.LIGHTGRAY,
+                    );
+                }
+
+                for (0..grid.len) |row| {
+                    for (0..grid[row].len) |col| {
+                        const x: f32 = @floatFromInt(col * CELL_SIZE);
+                        const y: f32 = @floatFromInt(row * CELL_SIZE);
+
+                        if (grid[row][col]) {
+                            raylib.DrawRectangleRec(
+                                raylib.Rectangle{
+                                    .x = x,
+                                    .y = y,
+                                    .width = CELL_SIZE,
+                                    .height = CELL_SIZE,
+                                },
+                                raylib.RED,
+                            );
+                        }
                     }
-
-                    i += 1;
                 }
             }
         }
